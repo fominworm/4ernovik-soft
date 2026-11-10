@@ -2,11 +2,17 @@ name: Build APK
 on:
   push:
   workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: build
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -14,7 +20,37 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+      - name: Signing key (created once)
+        run: |
+          if [ ! -f signing/ttb.jks ]; then
+            mkdir -p signing
+            keytool -genkeypair -keystore signing/ttb.jks -storetype PKCS12 -storepass taptapbot -keypass taptapbot -alias ttb -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=TapTapBot"
+            git config user.name "actions"
+            git config user.email "actions@users.noreply.github.com"
+            git add -f signing/ttb.jks
+            git commit -m "signing key [skip ci]"
+            git push
+          fi
       - run: unzip -q ./*.zip -d proj
+      - name: Version and signing
+        run: |
+          cat >> proj/app/build.gradle <<'EOF'
+
+          android {
+              defaultConfig {
+                  versionCode ${{ github.run_number }}
+                  versionName "1.0.${{ github.run_number }}"
+              }
+              signingConfigs {
+                  debug {
+                      storeFile file("${{ github.workspace }}/signing/ttb.jks")
+                      storePassword "taptapbot"
+                      keyAlias "ttb"
+                      keyPassword "taptapbot"
+                  }
+              }
+          }
+          EOF
       - run: gradle assembleDebug --no-daemon
         working-directory: proj
       - uses: actions/upload-artifact@v4

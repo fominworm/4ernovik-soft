@@ -14,7 +14,13 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+      - name: Один zip с проектом в корне репозитория
+        run: |
+          n=$(ls ./*.zip 2>/dev/null | wc -l)
+          if [ "$n" -ne 1 ]; then echo "Нужен ровно один zip в корне, найдено: $n"; ls ./*.zip; exit 1; fi
       - run: unzip -q ./*.zip -d proj
+      - name: Проверка эталона посева (WHEAT-SYNC)
+        run: python3 proj/tools/wheat_sync_check.py
       - run: gradle assembleDebug --no-daemon
         working-directory: proj
       - uses: actions/upload-artifact@v4
